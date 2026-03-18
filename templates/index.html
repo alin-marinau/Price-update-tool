@@ -1,0 +1,974 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>elogicode.ro · Actualizare Prețuri</title>
+
+  <!-- Bootstrap 5 -->
+  <link rel="stylesheet"
+    href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.2/css/bootstrap.min.css" />
+  <!-- Font Awesome -->
+  <link rel="stylesheet"
+    href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+
+  <style>
+    :root {
+      --brand: #0066cc;
+      --brand-dark: #004a99;
+      --accent: #ff6b00;
+      --success: #198754;
+      --danger: #dc3545;
+      --muted: #6c757d;
+      --bg: #f5f7fa;
+      --card-bg: #ffffff;
+      --header-bg: #0d1b2a;
+      --row-modified: #fff8e1;
+      --row-ok: #e8f5e9;
+      --row-error: #ffebee;
+    }
+
+    body {
+      background: var(--bg);
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      font-size: 14px;
+      color: #212529;
+    }
+
+    /* ── Top nav ── */
+    .topnav {
+      background: var(--header-bg);
+      color: white;
+      padding: 0 1.5rem;
+      height: 56px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 1000;
+      box-shadow: 0 2px 8px rgba(0,0,0,.3);
+    }
+    .topnav .logo {
+      font-size: 1.1rem;
+      font-weight: 700;
+      letter-spacing: .02em;
+    }
+    .topnav .logo span { color: var(--accent); }
+
+    /* ── Config panel ── */
+    #config-panel {
+      background: #1e3a5f;
+      color: #e8edf2;
+      padding: 1rem 1.5rem;
+      border-bottom: 3px solid var(--accent);
+    }
+    #config-panel .form-label { font-size: .75rem; text-transform: uppercase;
+                                letter-spacing: .06em; color: #aab8c8; }
+    #config-panel .form-control {
+      background: rgba(255,255,255,.1);
+      border: 1px solid rgba(255,255,255,.2);
+      color: white;
+      font-size: .85rem;
+    }
+    #config-panel .form-control::placeholder { color: rgba(255,255,255,.35); }
+    #config-panel .form-control:focus {
+      background: rgba(255,255,255,.15);
+      border-color: var(--accent);
+      box-shadow: 0 0 0 .2rem rgba(255,107,0,.25);
+      color: white;
+    }
+    .connected-badge {
+      background: #1a7a4a; border: 1px solid #2ecc71;
+      border-radius: 8px; padding: .6rem 1rem;
+      display: flex; align-items: center; gap: .75rem;
+    }
+
+    /* ── Toolbar ── */
+    .toolbar {
+      background: white;
+      border-bottom: 1px solid #dee2e6;
+      padding: .6rem 1.5rem;
+      display: flex;
+      align-items: center;
+      gap: .75rem;
+      flex-wrap: wrap;
+      position: sticky;
+      top: 56px;
+      z-index: 990;
+    }
+    .toolbar .search-wrap { position: relative; flex: 1; min-width: 180px; max-width: 320px; }
+    .toolbar .search-wrap i {
+      position: absolute; left: .7rem; top: 50%; transform: translateY(-50%);
+      color: var(--muted); pointer-events: none;
+    }
+    .toolbar .search-wrap input { padding-left: 2.2rem; font-size: .85rem; }
+    .badge-pending {
+      background: var(--accent); color: white;
+      font-size: .75rem; padding: .25em .6em; border-radius: 99px;
+      min-width: 1.4rem; text-align: center;
+    }
+
+    /* ── Main content ── */
+    .main-wrap { padding: 1.25rem 1.5rem 4rem; }
+
+    /* ── Category accordion ── */
+    .cat-section { margin-bottom: 1.25rem; border-radius: 8px; overflow: hidden;
+                   box-shadow: 0 1px 4px rgba(0,0,0,.08); }
+    .cat-header {
+      background: white;
+      padding: .7rem 1rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      cursor: pointer;
+      border-bottom: 1px solid #e9ecef;
+      user-select: none;
+    }
+    .cat-header:hover { background: #f8f9fa; }
+    .cat-header .cat-title {
+      font-weight: 600;
+      font-size: .9rem;
+      display: flex;
+      align-items: center;
+      gap: .5rem;
+    }
+    .cat-header .cat-title i { color: var(--brand); width: 16px; text-align: center; }
+    .cat-count { font-size: .75rem; color: var(--muted); font-weight: 400; }
+    .cat-chevron { color: var(--muted); transition: transform .2s; }
+    .cat-header.collapsed .cat-chevron { transform: rotate(-90deg); }
+
+    /* ── Products table ── */
+    .cat-body { background: var(--card-bg); }
+    .products-table { margin: 0; font-size: .82rem; }
+    .products-table thead th {
+      background: #f1f3f5;
+      font-size: .72rem;
+      text-transform: uppercase;
+      letter-spacing: .05em;
+      color: var(--muted);
+      font-weight: 600;
+      border-bottom: 2px solid #dee2e6;
+      white-space: nowrap;
+      padding: .5rem .75rem;
+    }
+    .products-table tbody tr { border-bottom: 1px solid #f0f0f0; transition: background .15s; }
+    .products-table tbody tr:last-child { border-bottom: none; }
+    .products-table tbody tr:hover { background: #fafbfc; }
+    .products-table tbody tr.row-modified { background: var(--row-modified) !important; }
+    .products-table tbody tr.row-ok { background: var(--row-ok) !important; }
+    .products-table tbody tr.row-error { background: var(--row-error) !important; }
+
+    .products-table td { padding: .45rem .75rem; vertical-align: middle; }
+    .td-name { font-weight: 500; max-width: 280px; }
+    .td-name small { display: block; color: var(--muted); font-weight: 400; font-size: .75rem; }
+    .td-sku { font-family: monospace; color: #555; font-size: .8rem; }
+    .td-price { font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .td-price .currency { color: var(--muted); font-size: .75rem; }
+
+    /* New price input */
+    .price-input-wrap { position: relative; width: 110px; }
+    .price-input-wrap .currency-badge {
+      position: absolute; right: .5rem; top: 50%;
+      transform: translateY(-50%);
+      font-size: .7rem; color: var(--muted); pointer-events: none;
+    }
+    .price-new-input {
+      width: 100%; padding: .3rem .5rem;
+      padding-right: 2.2rem;
+      border: 1px solid #ced4da;
+      border-radius: 5px;
+      font-size: .82rem;
+      font-variant-numeric: tabular-nums;
+      transition: border-color .15s, box-shadow .15s;
+    }
+    .price-new-input:focus {
+      outline: none;
+      border-color: var(--brand);
+      box-shadow: 0 0 0 .15rem rgba(0,102,204,.2);
+    }
+    .price-new-input.has-value {
+      border-color: var(--accent);
+      background: #fff8f2;
+    }
+
+    /* Status column */
+    .status-icon { font-size: .9rem; }
+    .status-icon.ok    { color: var(--success); }
+    .status-icon.err   { color: var(--danger); }
+    .status-icon.spin  { color: var(--brand); animation: spin 1s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Empty / loading states ── */
+    #empty-state, #loading-state {
+      text-align: center; padding: 4rem 1rem; color: var(--muted);
+    }
+    #empty-state i, #loading-state i { font-size: 3rem; margin-bottom: 1rem; opacity: .35; }
+
+    /* ── Sticky footer bar ── */
+    #save-bar {
+      position: fixed; bottom: 0; left: 0; right: 0;
+      background: var(--header-bg);
+      color: white;
+      padding: .75rem 1.5rem;
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 1rem;
+      box-shadow: 0 -3px 12px rgba(0,0,0,.25);
+      z-index: 1000;
+      transform: translateY(100%);
+      transition: transform .25s ease;
+    }
+    #save-bar.visible { transform: translateY(0); }
+    #save-bar .save-info { font-size: .85rem; opacity: .8; }
+    #save-bar .save-info strong { color: var(--accent); font-size: 1rem; }
+
+    /* ── Toast notifications ── */
+    .toast-container { position: fixed; top: 70px; right: 1rem; z-index: 9999; }
+
+    /* ── Responsive tweaks ── */
+    @media (max-width: 768px) {
+      .topnav { padding: 0 .75rem; }
+      .main-wrap { padding: .75rem; }
+      .toolbar { padding: .5rem .75rem; }
+      .td-name { max-width: 160px; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ══ TOP NAV ═══════════════════════════════════════════════════════════════ -->
+<nav class="topnav">
+  <div class="logo">
+    <i class="fas fa-tag me-2"></i>
+    <span>elogicode</span>.ro &nbsp;·&nbsp; Actualizare Prețuri
+  </div>
+  <div class="d-flex align-items-center gap-2">
+    <span id="store-badge" class="badge bg-secondary" style="font-size:.7rem"></span>
+    <button class="btn btn-sm btn-outline-light" id="btn-toggle-config" title="Configurare">
+      <i class="fas fa-cog"></i>
+    </button>
+  </div>
+</nav>
+
+<!-- ══ CONFIG PANEL ══════════════════════════════════════════════════════════ -->
+<div id="config-panel">
+  <!-- STATE A: conectat -->
+  <div id="panel-connected" class="d-none">
+    <div class="connected-badge">
+      <i class="fas fa-check-circle text-success fa-lg"></i>
+      <div>
+        <div style="font-weight:600; font-size:.9rem;">Conectat la Shopify</div>
+        <div id="connected-store" style="font-size:.78rem; opacity:.75;"></div>
+      </div>
+      <button class="btn btn-sm btn-outline-warning ms-auto" id="btn-disconnect">
+        <i class="fas fa-unlink me-1"></i> Deconectează
+      </button>
+    </div>
+  </div>
+
+  <!-- STATE B: neconectat – formular credențiale -->
+  <div id="panel-setup">
+    <div class="row g-3 align-items-end">
+      <div class="col-sm-4">
+        <label class="form-label">Store URL (logicode.myshopify.com)</label>
+        <input type="url" id="inp-store-url" class="form-control form-control-sm"
+               placeholder="https://logicode.myshopify.com" autocomplete="off" />
+      </div>
+      <div class="col-sm-3">
+        <label class="form-label">
+          Client ID
+          <a href="#" class="text-warning ms-1" data-bs-toggle="modal" data-bs-target="#helpModal"
+             style="font-size:.72rem; text-transform:none;">
+            <i class="fas fa-question-circle"></i> Cum?
+          </a>
+        </label>
+        <input type="text" id="inp-client-id" class="form-control form-control-sm"
+               placeholder="7c22f5c7ba71cc8d…" autocomplete="off" />
+      </div>
+      <div class="col-sm-3">
+        <label class="form-label">Secret</label>
+        <input type="password" id="inp-client-secret" class="form-control form-control-sm"
+               placeholder="shpss_…" autocomplete="off" />
+      </div>
+      <div class="col-sm-2">
+        <button class="btn btn-warning btn-sm w-100" id="btn-save-config">
+          <i class="fas fa-plug me-1"></i> Conectează cu Shopify
+        </button>
+      </div>
+    </div>
+    <div id="config-status" class="mt-2" style="min-height:1.2rem; font-size:.8rem;"></div>
+  </div>
+</div>
+
+<!-- ══ TOOLBAR ═══════════════════════════════════════════════════════════════ -->
+<div class="toolbar">
+  <button class="btn btn-primary btn-sm" id="btn-load" disabled>
+    <i class="fas fa-sync-alt me-1"></i> Încarcă produse
+  </button>
+
+  <div class="search-wrap">
+    <i class="fas fa-search"></i>
+    <input type="text" id="inp-search" class="form-control form-control-sm"
+           placeholder="Caută după denumire sau cod…" />
+  </div>
+
+  <select id="sel-category" class="form-select form-select-sm" style="max-width:220px;">
+    <option value="">Toate categoriile</option>
+  </select>
+
+  <div class="ms-auto d-flex align-items-center gap-2">
+    <span id="product-count" class="text-muted small"></span>
+    <button class="btn btn-success btn-sm d-none" id="btn-save-all">
+      <i class="fas fa-check-double me-1"></i>
+      Salvează toate modificările
+      <span class="badge-pending ms-1" id="badge-count">0</span>
+    </button>
+  </div>
+</div>
+
+<!-- ══ MAIN CONTENT ══════════════════════════════════════════════════════════ -->
+<div class="main-wrap" id="main-wrap">
+  <div id="loading-state" class="d-none">
+    <i class="fas fa-circle-notch fa-spin"></i>
+    <p class="mt-2">Se încarcă produsele din Shopify…</p>
+    <p class="small" id="loading-sub"></p>
+  </div>
+  <div id="empty-state">
+    <i class="fas fa-boxes"></i>
+    <p class="mt-2 fw-semibold">Nu există produse încărcate</p>
+    <p class="small">Configurați conexiunea Shopify și apăsați <strong>Încarcă produse</strong>.</p>
+  </div>
+  <div id="products-container" class="d-none"></div>
+</div>
+
+<!-- ══ STICKY SAVE BAR ════════════════════════════════════════════════════════ -->
+<div id="save-bar">
+  <div class="save-info">
+    <strong id="sb-count">0</strong> produs(e) modificat(e) nesalvate
+  </div>
+  <div class="d-flex gap-2">
+    <button class="btn btn-secondary btn-sm" id="sb-cancel">
+      <i class="fas fa-times me-1"></i> Anulează
+    </button>
+    <button class="btn btn-success btn-sm" id="sb-save">
+      <i class="fas fa-save me-1"></i> Salvează modificările
+    </button>
+  </div>
+</div>
+
+<!-- ══ TOAST CONTAINER ════════════════════════════════════════════════════════ -->
+<div class="toast-container" id="toast-container"></div>
+
+<!-- ══ HELP MODAL ═════════════════════════════════════════════════════════════ -->
+<div class="modal fade" id="helpModal" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="fas fa-plug me-2 text-warning"></i>Cum conectezi aplicația cu Shopify?</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body small">
+        <p class="fw-semibold mb-1">Pasul 1 – Configurează aplicația în Shopify Dev Dashboard</p>
+        <ol class="ps-3">
+          <li class="mb-2">Intră în <strong>Shopify Admin</strong> → <em>Settings → Apps</em> → <strong>Develop apps</strong> → <strong>Build apps in Dev Dashboard</strong></li>
+          <li class="mb-2">Creează o aplicație nouă (ex: <em>Price Tool</em>)</li>
+          <li class="mb-2">Mergi la <strong>Settings</strong> din aplicație → completează:
+            <ul class="mt-1">
+              <li><strong>App URL:</strong> <code>http://127.0.0.1:5000</code></li>
+              <li><strong>Allowed redirection URL(s):</strong> <code>http://127.0.0.1:5000/oauth/callback</code></li>
+            </ul>
+          </li>
+          <li class="mb-2">Salvează → copiază <strong>Client ID</strong> și <strong>Secret</strong> din tab-ul <em>Credentials</em></li>
+        </ol>
+        <hr class="my-2"/>
+        <p class="fw-semibold mb-1">Pasul 2 – Conectează în această aplicație</p>
+        <ol class="ps-3">
+          <li class="mb-2">Completează <strong>Store URL</strong> (ex: <code>https://logicode.myshopify.com</code>), <strong>Client ID</strong> și <strong>Secret</strong></li>
+          <li class="mb-2">Apasă <strong>"Conectează cu Shopify"</strong> → browserul te duce la Shopify pentru autorizare</li>
+          <li>Autorizează → revii automat în aplicație, conectat</li>
+        </ol>
+        <div class="alert alert-info mt-2 mb-0 small">
+          <i class="fas fa-info-circle me-1"></i>
+          Autorizarea se face o singură dată. Tokenul se salvează local și rămâne activ.
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Bootstrap JS -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.2/js/bootstrap.bundle.min.js"></script>
+
+<script>
+/* ════════════════════════════════════════════════════════════════════════════
+   STATE
+   ════════════════════════════════════════════════════════════════════════════ */
+let allProducts = [];
+let pendingChanges = new Map();
+let configOk = false;
+
+/* ════════════════════════════════════════════════════════════════════════════
+   INIT
+   ════════════════════════════════════════════════════════════════════════════ */
+document.addEventListener('DOMContentLoaded', async () => {
+  await loadConfig();
+  bindEvents();
+  // Dacă tocmai am revenit de la OAuth cu succes
+  if (new URLSearchParams(window.location.search).get('connected') === '1') {
+    showToast('Conectat cu succes la Shopify! Apasă Încarcă produse.', 'success');
+    history.replaceState({}, '', '/');
+  }
+});
+
+async function loadConfig() {
+  try {
+    const r = await fetch('/api/config');
+    const d = await r.json();
+
+    if (d.store_url) document.getElementById('inp-store-url').value = d.store_url;
+    if (d.client_id) document.getElementById('inp-client-id').value = d.client_id;
+
+    if (d.has_token) {
+      // Suntem conectați
+      configOk = true;
+      document.getElementById('panel-connected').classList.remove('d-none');
+      document.getElementById('panel-setup').classList.add('d-none');
+      document.getElementById('connected-store').textContent = d.store_url || '';
+      document.getElementById('btn-load').disabled = false;
+      updateStoreBadge(d.store_url);
+    } else {
+      document.getElementById('panel-connected').classList.add('d-none');
+      document.getElementById('panel-setup').classList.remove('d-none');
+    }
+  } catch (e) {
+    console.error('loadConfig error', e);
+  }
+}
+
+function bindEvents() {
+  document.getElementById('btn-toggle-config').addEventListener('click', () => {
+    const p = document.getElementById('config-panel');
+    p.style.display = p.style.display === 'none' ? '' : 'none';
+  });
+
+  document.getElementById('btn-save-config').addEventListener('click', saveConfig);
+  document.getElementById('btn-disconnect').addEventListener('click', disconnect);
+  document.getElementById('btn-load').addEventListener('click', loadProducts);
+  document.getElementById('inp-search').addEventListener('input', filterAndRender);
+  document.getElementById('sel-category').addEventListener('change', filterAndRender);
+  document.getElementById('btn-save-all').addEventListener('click', saveAll);
+  document.getElementById('sb-save').addEventListener('click', saveAll);
+  document.getElementById('sb-cancel').addEventListener('click', cancelChanges);
+
+  ['inp-store-url', 'inp-client-id', 'inp-client-secret'].forEach(id => {
+    document.getElementById(id)?.addEventListener('keydown', e => {
+      if (e.key === 'Enter') saveConfig();
+    });
+  });
+}
+
+async function disconnect() {
+  await fetch('/api/disconnect', { method: 'POST' });
+  configOk = false;
+  document.getElementById('btn-load').disabled = true;
+  document.getElementById('panel-connected').classList.add('d-none');
+  document.getElementById('panel-setup').classList.remove('d-none');
+  document.getElementById('store-badge').textContent = '';
+  document.getElementById('store-badge').className = 'badge bg-secondary';
+  showToast('Deconectat. Reconectați-vă pentru a folosi aplicația.', 'warning');
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+   CONFIG — salvează credențialele și lansează OAuth
+   ════════════════════════════════════════════════════════════════════════════ */
+async function saveConfig() {
+  const url = document.getElementById('inp-store-url').value.trim();
+  const clientId = document.getElementById('inp-client-id').value.trim();
+  const clientSecret = document.getElementById('inp-client-secret').value.trim();
+
+  if (!url) { setConfigStatus('⚠ Introduceți Store URL.', 'warning'); return; }
+  if (!clientId) { setConfigStatus('⚠ Introduceți Client ID.', 'warning'); return; }
+  if (!clientSecret) { setConfigStatus('⚠ Introduceți Secret.', 'warning'); return; }
+
+  const body = { store_url: url, client_id: clientId, client_secret: clientSecret };
+
+  setConfigStatus('<i class="fas fa-circle-notch fa-spin me-1"></i>Salvare…', 'secondary');
+
+  try {
+    const r = await fetch('/api/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    const d = await r.json();
+    if (d.status === 'ok') {
+      // Credențialele sunt salvate → lansăm OAuth
+      setConfigStatus('<i class="fas fa-circle-notch fa-spin me-1"></i>Redirecționare spre Shopify pentru autorizare…', 'secondary');
+      setTimeout(() => { window.location.href = '/install'; }, 800);
+    }
+  } catch (e) {
+    setConfigStatus('✘ Eroare la salvare: ' + e.message, 'danger');
+  }
+}
+
+function setConfigStatus(html, type) {
+  const el = document.getElementById('config-status');
+  const colors = { success: '#86efac', warning: '#fde68a', danger: '#fca5a5', secondary: '#cbd5e1' };
+  el.innerHTML = `<span style="color:${colors[type] || '#cbd5e1'}">${html}</span>`;
+}
+
+function updateStoreBadge(url) {
+  try {
+    const badge = document.getElementById('store-badge');
+    badge.textContent = new URL(url).hostname;
+    badge.className = 'badge bg-success';
+  } catch (_) {}
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+   LOAD PRODUCTS
+   ════════════════════════════════════════════════════════════════════════════ */
+async function loadProducts() {
+  showLoading(true);
+
+  try {
+    const r = await fetch('/api/products');
+    const d = await r.json();
+
+    if (!r.ok || d.error) {
+      showToast(d.error || 'Eroare la încărcare', 'danger');
+      showLoading(false);
+      return;
+    }
+
+    allProducts = d.products || [];
+    pendingChanges.clear();
+
+    // Populate category filter
+    const categories = [...new Set(allProducts.map(p => p.category))].sort();
+    const sel = document.getElementById('sel-category');
+    sel.innerHTML = '<option value="">Toate categoriile</option>';
+    categories.forEach(c => {
+      const o = document.createElement('option');
+      o.value = c;
+      o.textContent = c;
+      sel.appendChild(o);
+    });
+
+    showLoading(false);
+    filterAndRender();
+    showToast(`${d.total} variante încărcate din ${categories.length} categorii.`, 'success');
+
+  } catch (e) {
+    showLoading(false);
+    showToast('Eroare de conexiune: ' + e.message, 'danger');
+  }
+}
+
+function showLoading(state) {
+  document.getElementById('loading-state').classList.toggle('d-none', !state);
+  document.getElementById('empty-state').classList.add('d-none');
+  document.getElementById('products-container').classList.add('d-none');
+  if (state) {
+    document.getElementById('btn-load').disabled = true;
+    document.getElementById('btn-load').innerHTML =
+      '<i class="fas fa-circle-notch fa-spin me-1"></i> Se încarcă…';
+  } else {
+    document.getElementById('btn-load').disabled = false;
+    document.getElementById('btn-load').innerHTML =
+      '<i class="fas fa-sync-alt me-1"></i> Reîncarcă';
+  }
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+   FILTER & RENDER
+   ════════════════════════════════════════════════════════════════════════════ */
+function filterAndRender() {
+  const query = document.getElementById('inp-search').value.toLowerCase().trim();
+  const catFilter = document.getElementById('sel-category').value;
+
+  let filtered = allProducts;
+
+  if (catFilter) filtered = filtered.filter(p => p.category === catFilter);
+  if (query) {
+    filtered = filtered.filter(p =>
+      p.product_title.toLowerCase().includes(query) ||
+      (p.variant_title || '').toLowerCase().includes(query) ||
+      (p.sku || '').toLowerCase().includes(query)
+    );
+  }
+
+  const container = document.getElementById('products-container');
+  const countEl = document.getElementById('product-count');
+
+  if (filtered.length === 0) {
+    container.classList.add('d-none');
+    if (allProducts.length > 0) {
+      document.getElementById('empty-state').classList.remove('d-none');
+      document.getElementById('empty-state').innerHTML = `
+        <i class="fas fa-search"></i>
+        <p class="mt-2 fw-semibold">Niciun produs găsit</p>
+        <p class="small">Modificați criteriile de căutare.</p>`;
+    } else {
+      document.getElementById('empty-state').classList.remove('d-none');
+    }
+    countEl.textContent = '';
+    return;
+  }
+
+  document.getElementById('empty-state').classList.add('d-none');
+  container.classList.remove('d-none');
+
+  countEl.textContent = `${filtered.length} variante`;
+
+  // Group by category
+  const byCategory = {};
+  filtered.forEach(p => {
+    (byCategory[p.category] = byCategory[p.category] || []).push(p);
+  });
+
+  container.innerHTML = '';
+  Object.keys(byCategory).sort().forEach(cat => {
+    container.appendChild(buildCategorySection(cat, byCategory[cat]));
+  });
+
+  updatePendingUI();
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+   BUILD CATEGORY SECTION
+   ════════════════════════════════════════════════════════════════════════════ */
+function buildCategorySection(category, products) {
+  const section = document.createElement('div');
+  section.className = 'cat-section';
+  section.dataset.category = category;
+
+  // Header
+  const header = document.createElement('div');
+  header.className = 'cat-header';
+  header.innerHTML = `
+    <div class="cat-title">
+      <i class="fas fa-folder"></i>
+      ${escHtml(category)}
+      <span class="cat-count">${products.length} produs${products.length === 1 ? '' : 'e'}</span>
+    </div>
+    <i class="fas fa-chevron-down cat-chevron"></i>`;
+
+  const body = document.createElement('div');
+  body.className = 'cat-body';
+
+  // Table
+  const table = document.createElement('table');
+  table.className = 'table products-table';
+  table.innerHTML = `
+    <thead>
+      <tr>
+        <th style="width:35%">Denumire produs</th>
+        <th style="width:14%">Cod produs (SKU)</th>
+        <th style="width:13%">Preț curent</th>
+        <th style="width:14%">Preț nou</th>
+        <th style="width:14%">Preț comparat</th>
+        <th style="width:6%"></th>
+        <th style="width:4%"></th>
+      </tr>
+    </thead>
+    <tbody></tbody>`;
+
+  const tbody = table.querySelector('tbody');
+  products.forEach(p => tbody.appendChild(buildProductRow(p)));
+
+  body.appendChild(table);
+
+  // Toggle
+  header.addEventListener('click', () => {
+    const collapsed = body.style.display === 'none';
+    body.style.display = collapsed ? '' : 'none';
+    header.classList.toggle('collapsed', !collapsed);
+  });
+
+  section.appendChild(header);
+  section.appendChild(body);
+
+  return section;
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+   BUILD PRODUCT ROW
+   ════════════════════════════════════════════════════════════════════════════ */
+function buildProductRow(p) {
+  const tr = document.createElement('tr');
+  tr.id = `row-${p.variant_id}`;
+
+  const displayName = p.variant_title
+    ? `${p.product_title}<small>${escHtml(p.variant_title)}</small>`
+    : escHtml(p.product_title);
+
+  tr.innerHTML = `
+    <td class="td-name">${displayName}</td>
+    <td class="td-sku">${escHtml(p.sku) || '<span class="text-muted">—</span>'}</td>
+    <td class="td-price" id="price-cur-${p.variant_id}">
+      ${formatPrice(p.price)}
+    </td>
+    <td>
+      <div class="price-input-wrap">
+        <input type="text" class="price-new-input"
+               id="inp-${p.variant_id}"
+               data-variant="${p.variant_id}"
+               data-original="${p.price}"
+               placeholder="${formatPriceRaw(p.price)}"
+               autocomplete="off" />
+        <span class="currency-badge">LEI</span>
+      </div>
+    </td>
+    <td class="td-price text-muted" id="compare-${p.variant_id}">
+      ${p.compare_at_price ? formatPrice(p.compare_at_price) : '<span class="text-muted">—</span>'}
+    </td>
+    <td>
+      <button class="btn btn-sm btn-outline-success py-0 px-2 btn-save-row d-none"
+              data-variant="${p.variant_id}" title="Salvează acest rând">
+        <i class="fas fa-check" style="font-size:.75rem"></i>
+      </button>
+    </td>
+    <td class="text-center">
+      <span class="status-icon" id="status-${p.variant_id}"></span>
+    </td>`;
+
+  // Bind input
+  const inp = tr.querySelector(`#inp-${p.variant_id}`);
+  inp.addEventListener('input', () => onPriceInput(inp, p.variant_id));
+  inp.addEventListener('keydown', e => {
+    if (e.key === 'Enter') saveSingleRow(p.variant_id);
+  });
+
+  // Bind save button
+  tr.querySelector('.btn-save-row').addEventListener('click', () => saveSingleRow(p.variant_id));
+
+  return tr;
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+   PRICE INPUT HANDLING
+   ════════════════════════════════════════════════════════════════════════════ */
+function onPriceInput(inp, variantId) {
+  const val = inp.value.trim().replace(',', '.');
+  const tr = document.getElementById(`row-${variantId}`);
+  const saveBtn = tr.querySelector('.btn-save-row');
+  const statusEl = document.getElementById(`status-${variantId}`);
+
+  if (val === '' || val === inp.dataset.original) {
+    // Cleared — remove from pending
+    pendingChanges.delete(variantId);
+    inp.classList.remove('has-value');
+    tr.classList.remove('row-modified');
+    saveBtn.classList.add('d-none');
+    statusEl.innerHTML = '';
+  } else if (!isNaN(parseFloat(val)) && parseFloat(val) >= 0) {
+    pendingChanges.set(variantId, val);
+    inp.classList.add('has-value');
+    tr.classList.add('row-modified');
+    tr.classList.remove('row-ok', 'row-error');
+    saveBtn.classList.remove('d-none');
+    statusEl.innerHTML = '';
+  } else {
+    inp.classList.remove('has-value');
+    statusEl.innerHTML = '<i class="fas fa-exclamation-triangle status-icon err" title="Preț invalid"></i>';
+  }
+
+  updatePendingUI();
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+   SAVE SINGLE ROW
+   ════════════════════════════════════════════════════════════════════════════ */
+async function saveSingleRow(variantId) {
+  const newPrice = pendingChanges.get(variantId);
+  if (!newPrice) return;
+
+  const tr = document.getElementById(`row-${variantId}`);
+  const statusEl = document.getElementById(`status-${variantId}`);
+
+  statusEl.innerHTML = '<i class="fas fa-circle-notch spin status-icon"></i>';
+  tr.querySelector('.btn-save-row').disabled = true;
+
+  try {
+    const r = await fetch('/api/update-price', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ variant_id: variantId, new_price: newPrice })
+    });
+    const d = await r.json();
+
+    if (r.ok && d.status === 'ok') {
+      // Update current price in DOM
+      document.getElementById(`price-cur-${variantId}`).innerHTML = formatPrice(d.new_price);
+      const inp = document.getElementById(`inp-${variantId}`);
+      inp.dataset.original = d.new_price;
+      inp.value = '';
+      inp.classList.remove('has-value');
+
+      pendingChanges.delete(variantId);
+      tr.classList.remove('row-modified');
+      tr.classList.add('row-ok');
+      tr.querySelector('.btn-save-row').classList.add('d-none');
+      statusEl.innerHTML = '<i class="fas fa-check status-icon ok"></i>';
+
+      setTimeout(() => {
+        tr.classList.remove('row-ok');
+        statusEl.innerHTML = '';
+      }, 3000);
+
+    } else {
+      tr.classList.add('row-error');
+      statusEl.innerHTML = `<i class="fas fa-times status-icon err" title="${escHtml(d.error || 'Eroare')}"></i>`;
+      showToast(d.error || 'Eroare la salvare', 'danger');
+      tr.querySelector('.btn-save-row').disabled = false;
+    }
+  } catch (e) {
+    statusEl.innerHTML = '<i class="fas fa-times status-icon err"></i>';
+    showToast('Eroare de conexiune', 'danger');
+    tr.querySelector('.btn-save-row').disabled = false;
+  }
+
+  updatePendingUI();
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+   SAVE ALL
+   ════════════════════════════════════════════════════════════════════════════ */
+async function saveAll() {
+  if (pendingChanges.size === 0) return;
+
+  const updates = [...pendingChanges.entries()].map(([variant_id, new_price]) => ({
+    variant_id, new_price
+  }));
+
+  // Mark all as spinning
+  updates.forEach(u => {
+    const statusEl = document.getElementById(`status-${u.variant_id}`);
+    if (statusEl) statusEl.innerHTML = '<i class="fas fa-circle-notch spin status-icon"></i>';
+  });
+
+  document.getElementById('sb-save').disabled = true;
+  document.getElementById('btn-save-all').disabled = true;
+
+  try {
+    const r = await fetch('/api/bulk-update', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updates)
+    });
+    const d = await r.json();
+
+    d.results.forEach(res => {
+      const variantId = res.variant_id;
+      const tr = document.getElementById(`row-${variantId}`);
+      const statusEl = document.getElementById(`status-${variantId}`);
+      const inp = document.getElementById(`inp-${variantId}`);
+
+      if (res.status === 'ok') {
+        document.getElementById(`price-cur-${variantId}`).innerHTML = formatPrice(res.new_price);
+        inp.dataset.original = res.new_price;
+        inp.value = '';
+        inp.classList.remove('has-value');
+        pendingChanges.delete(variantId);
+        tr.classList.remove('row-modified', 'row-error');
+        tr.classList.add('row-ok');
+        tr.querySelector('.btn-save-row').classList.add('d-none');
+        statusEl.innerHTML = '<i class="fas fa-check status-icon ok"></i>';
+        setTimeout(() => { tr.classList.remove('row-ok'); statusEl.innerHTML = ''; }, 3000);
+      } else {
+        tr.classList.add('row-error');
+        statusEl.innerHTML = `<i class="fas fa-times status-icon err" title="${escHtml(res.message || '')}"></i>`;
+      }
+    });
+
+    if (d.errors === 0) {
+      showToast(`Toate cele ${d.ok} prețuri au fost actualizate cu succes!`, 'success');
+    } else {
+      showToast(`${d.ok} actualizate, ${d.errors} erori.`, 'warning');
+    }
+
+  } catch (e) {
+    showToast('Eroare de conexiune la salvare', 'danger');
+  }
+
+  document.getElementById('sb-save').disabled = false;
+  document.getElementById('btn-save-all').disabled = false;
+  updatePendingUI();
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+   CANCEL ALL CHANGES
+   ════════════════════════════════════════════════════════════════════════════ */
+function cancelChanges() {
+  pendingChanges.forEach((_, variantId) => {
+    const inp = document.getElementById(`inp-${variantId}`);
+    const tr = document.getElementById(`row-${variantId}`);
+    if (inp) { inp.value = ''; inp.classList.remove('has-value'); }
+    if (tr) {
+      tr.classList.remove('row-modified', 'row-error');
+      tr.querySelector('.btn-save-row')?.classList.add('d-none');
+    }
+    const statusEl = document.getElementById(`status-${variantId}`);
+    if (statusEl) statusEl.innerHTML = '';
+  });
+  pendingChanges.clear();
+  updatePendingUI();
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+   PENDING CHANGES UI UPDATE
+   ════════════════════════════════════════════════════════════════════════════ */
+function updatePendingUI() {
+  const n = pendingChanges.size;
+  document.getElementById('badge-count').textContent = n;
+  document.getElementById('sb-count').textContent = n;
+  document.getElementById('save-bar').classList.toggle('visible', n > 0);
+  document.getElementById('btn-save-all').classList.toggle('d-none', n === 0);
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+   HELPERS
+   ════════════════════════════════════════════════════════════════════════════ */
+function formatPrice(val) {
+  const n = parseFloat(val);
+  if (isNaN(n)) return '—';
+  return `<strong>${n.toLocaleString('ro-RO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
+          <span class="currency">LEI</span>`;
+}
+
+function formatPriceRaw(val) {
+  const n = parseFloat(val);
+  if (isNaN(n)) return '';
+  return n.toFixed(2);
+}
+
+function escHtml(str) {
+  return String(str)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function showToast(message, type = 'info') {
+  const icons = { success: 'fa-check-circle', danger: 'fa-exclamation-circle',
+                  warning: 'fa-exclamation-triangle', info: 'fa-info-circle' };
+  const id = `toast-${Date.now()}`;
+  const el = document.createElement('div');
+  el.id = id;
+  el.className = `toast align-items-center text-bg-${type} border-0 show mb-2`;
+  el.setAttribute('role', 'alert');
+  el.innerHTML = `
+    <div class="d-flex">
+      <div class="toast-body d-flex align-items-center gap-2">
+        <i class="fas ${icons[type] || 'fa-info-circle'}"></i>
+        ${escHtml(message)}
+      </div>
+      <button type="button" class="btn-close btn-close-white me-2 m-auto"
+              data-bs-dismiss="toast"></button>
+    </div>`;
+  document.getElementById('toast-container').appendChild(el);
+  setTimeout(() => el.remove(), 5000);
+}
+</script>
+</body>
+</html>
