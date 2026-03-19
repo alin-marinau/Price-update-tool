@@ -225,6 +225,26 @@
     /* ── Toast notifications ── */
     .toast-container { position: fixed; top: 70px; right: 1rem; z-index: 9999; }
 
+    /* ── Competitor price cells ── */
+    .td-competitor { white-space: nowrap; font-size: .82rem; }
+    .comp-price { font-variant-numeric: tabular-nums; font-weight: 500; }
+    .comp-price.cheaper { color: #dc3545; font-weight: 700; }
+    .comp-price.same    { color: #198754; }
+    .comp-price.pricier { color: #6c757d; }
+    .comp-fetch-btn {
+      border: none; background: none; padding: 0 3px;
+      color: #adb5bd; cursor: pointer; font-size: .8rem;
+      line-height: 1;
+    }
+    .comp-fetch-btn:hover { color: #0066cc; }
+    .comp-cell-wrap { display: flex; align-items: center; gap: 4px; }
+    .comp-link { font-size: .7rem; color: #adb5bd; text-decoration: none; }
+    .comp-link:hover { color: #0066cc; }
+
+    /* ── Competitor form rows ── */
+    .comp-row { background: #f8f9fa; border-radius: 6px; padding: .75rem; margin-bottom: .5rem; }
+    .comp-row .form-label { font-size: .72rem; margin-bottom: 2px; color: #6c757d; }
+
     /* ── Responsive tweaks ── */
     @media (max-width: 768px) {
       .topnav { padding: 0 .75rem; }
@@ -318,6 +338,13 @@
 
   <div class="ms-auto d-flex align-items-center gap-2">
     <span id="product-count" class="text-muted small"></span>
+    <button class="btn btn-outline-secondary btn-sm" id="btn-fetch-all-competitors" title="Preia prețurile competiției pentru produsele vizibile">
+      <i class="fas fa-globe me-1"></i> Prețuri competiție
+    </button>
+    <button class="btn btn-outline-info btn-sm" id="btn-competitors-config"
+            data-bs-toggle="modal" data-bs-target="#competitorsModal">
+      <i class="fas fa-cogs me-1"></i> Competitori
+    </button>
     <button class="btn btn-success btn-sm d-none" id="btn-save-all">
       <i class="fas fa-check-double me-1"></i>
       Salvează toate modificările
@@ -391,6 +418,36 @@
           <i class="fas fa-info-circle me-1"></i>
           Autorizarea se face o singură dată. Tokenul se salvează local și rămâne activ.
         </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ COMPETITORS MODAL ══════════════════════════════════════════════════════ -->
+<div class="modal fade" id="competitorsModal" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="fas fa-globe me-2 text-info"></i>Configurare Competitori</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p class="small text-muted mb-3">
+          Adaugă site-urile competiției. Folosește <code>{sku}</code> în URL pentru codul produsului.
+          <br>Selectorul CSS indică elementul HTML care conține prețul.
+        </p>
+
+        <div id="competitors-list"></div>
+
+        <button class="btn btn-outline-primary btn-sm mt-2" id="btn-add-competitor">
+          <i class="fas fa-plus me-1"></i> Adaugă competitor
+        </button>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Anulează</button>
+        <button class="btn btn-primary btn-sm" id="btn-save-competitors">
+          <i class="fas fa-save me-1"></i> Salvează competitorii
+        </button>
       </div>
     </div>
   </div>
@@ -663,13 +720,13 @@ function buildCategorySection(category, products) {
   table.innerHTML = `
     <thead>
       <tr>
-        <th style="width:35%">Denumire produs</th>
-        <th style="width:14%">Cod produs (SKU)</th>
-        <th style="width:13%">Preț curent</th>
-        <th style="width:14%">Preț nou</th>
-        <th style="width:14%">Preț comparat</th>
-        <th style="width:6%"></th>
-        <th style="width:4%"></th>
+        <th style="width:28%">Denumire produs</th>
+        <th style="width:12%">Cod produs (SKU)</th>
+        <th style="width:10%">Preț curent</th>
+        <th style="width:10%">Preț nou</th>
+        ${getCompetitorHeaders()}
+        <th style="width:5%"></th>
+        <th style="width:3%"></th>
       </tr>
     </thead>
     <tbody></tbody>`;
@@ -699,13 +756,15 @@ function buildProductRow(p) {
   const tr = document.createElement('tr');
   tr.id = `row-${p.variant_id}`;
 
-  const displayName = p.variant_title
-    ? `${p.product_title}<small>${escHtml(p.variant_title)}</small>`
-    : escHtml(p.product_title);
+  // Denumire: doar titlul produsului (fără variant_title care e codul)
+  const displayName = escHtml(p.product_title);
+
+  // Cod produs: SKU dacă există, altfel variant_title (care conține codul/PN-ul)
+  const codProdus = p.sku || p.variant_title || '';
 
   tr.innerHTML = `
     <td class="td-name">${displayName}</td>
-    <td class="td-sku">${escHtml(p.sku) || '<span class="text-muted">—</span>'}</td>
+    <td class="td-sku">${escHtml(codProdus) || '<span class="text-muted">—</span>'}</td>
     <td class="td-price" id="price-cur-${p.variant_id}">
       ${formatPrice(p.price)}
     </td>
@@ -720,9 +779,7 @@ function buildProductRow(p) {
         <span class="currency-badge">LEI</span>
       </div>
     </td>
-    <td class="td-price text-muted" id="compare-${p.variant_id}">
-      ${p.compare_at_price ? formatPrice(p.compare_at_price) : '<span class="text-muted">—</span>'}
-    </td>
+    ${getCompetitorCells(p)}
     <td>
       <button class="btn btn-sm btn-outline-success py-0 px-2 btn-save-row d-none"
               data-variant="${p.variant_id}" title="Salvează acest rând">
@@ -968,6 +1025,245 @@ function showToast(message, type = 'info') {
     </div>`;
   document.getElementById('toast-container').appendChild(el);
   setTimeout(() => el.remove(), 5000);
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+   COMPETITORS — Config
+   ════════════════════════════════════════════════════════════════════════════ */
+let competitorsList = [];   // [{id, name, search_url, price_selector}, ...]
+
+async function loadCompetitors() {
+  try {
+    const r = await fetch('/api/competitors');
+    competitorsList = await r.json();
+    renderCompetitorForms();
+  } catch (e) { console.error('loadCompetitors', e); }
+}
+
+function renderCompetitorForms() {
+  const container = document.getElementById('competitors-list');
+  if (!container) return;
+  container.innerHTML = '';
+  if (competitorsList.length === 0) {
+    container.innerHTML = '<p class="text-muted small">Niciun competitor configurat.</p>';
+    return;
+  }
+  competitorsList.forEach((c, i) => {
+    const div = document.createElement('div');
+    div.className = 'comp-row';
+    div.innerHTML = `
+      <div class="row g-2 align-items-end">
+        <div class="col-sm-3">
+          <label class="form-label">Nume competitor</label>
+          <input type="text" class="form-control form-control-sm comp-name"
+                 value="${escHtml(c.name || '')}" placeholder="ex: Altex" />
+        </div>
+        <div class="col-sm-4">
+          <label class="form-label">URL căutare (cu <code>{sku}</code>)</label>
+          <input type="text" class="form-control form-control-sm comp-url"
+                 value="${escHtml(c.search_url || '')}"
+                 placeholder="https://site.ro/search?q={sku}" />
+        </div>
+        <div class="col-sm-3">
+          <label class="form-label">Selector CSS preț</label>
+          <input type="text" class="form-control form-control-sm comp-selector"
+                 value="${escHtml(c.price_selector || '')}"
+                 placeholder=".price, [itemprop=price]" />
+        </div>
+        <div class="col-sm-2 text-end">
+          <button class="btn btn-sm btn-outline-danger" onclick="removeCompetitor(${i})">
+            <i class="fas fa-trash"></i>
+          </button>
+        </div>
+      </div>`;
+    container.appendChild(div);
+  });
+}
+
+function removeCompetitor(index) {
+  competitorsList.splice(index, 1);
+  renderCompetitorForms();
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  loadCompetitors();
+
+  document.getElementById('btn-add-competitor')?.addEventListener('click', () => {
+    competitorsList.push({ id: 'comp_' + Date.now(), name: '', search_url: '', price_selector: '' });
+    renderCompetitorForms();
+  });
+
+  document.getElementById('btn-save-competitors')?.addEventListener('click', async () => {
+    // Citește valorile din formular
+    const rows = document.querySelectorAll('#competitors-list .comp-row');
+    const updated = [];
+    rows.forEach((row, i) => {
+      const name = row.querySelector('.comp-name').value.trim();
+      const url  = row.querySelector('.comp-url').value.trim();
+      const sel  = row.querySelector('.comp-selector').value.trim();
+      if (name && url) {
+        updated.push({
+          id: competitorsList[i]?.id || 'comp_' + Date.now() + '_' + i,
+          name, search_url: url, price_selector: sel
+        });
+      }
+    });
+    competitorsList = updated;
+    await fetch('/api/competitors', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updated)
+    });
+    bootstrap.Modal.getInstance(document.getElementById('competitorsModal'))?.hide();
+    showToast(`${updated.length} competitor(i) salvați.`, 'success');
+    // Re-render tabelul cu noile coloane
+    if (allProducts.length > 0) filterAndRender();
+  });
+
+  document.getElementById('btn-fetch-all-competitors')?.addEventListener('click', fetchAllCompetitorPrices);
+});
+
+/* ════════════════════════════════════════════════════════════════════════════
+   COMPETITORS — Table columns
+   ════════════════════════════════════════════════════════════════════════════ */
+function getCompetitorHeaders() {
+  return competitorsList.map(c =>
+    `<th style="min-width:110px; white-space:nowrap;">
+       <i class="fas fa-store" style="font-size:.7rem;color:#6c757d"></i>
+       ${escHtml(c.name)}
+     </th>`
+  ).join('');
+}
+
+function getCompetitorCells(p) {
+  return competitorsList.map(c => `
+    <td class="td-competitor" id="comp-cell-${p.variant_id}-${c.id}">
+      <div class="comp-cell-wrap">
+        <span class="comp-price" id="comp-price-${p.variant_id}-${c.id}">—</span>
+        <button class="comp-fetch-btn"
+                onclick="fetchOneCompetitorPrice('${p.variant_id}','${escHtml(p.sku || p.variant_title || '')}','${c.id}')"
+                title="Preia prețul de la ${escHtml(c.name)}">
+          <i class="fas fa-sync-alt"></i>
+        </button>
+      </div>
+    </td>`
+  ).join('');
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+   COMPETITORS — Fetch prices
+   ════════════════════════════════════════════════════════════════════════════ */
+async function fetchOneCompetitorPrice(variantId, sku, competitorId) {
+  const priceEl = document.getElementById(`comp-price-${variantId}-${competitorId}`);
+  if (!priceEl) return;
+  if (!sku) { priceEl.innerHTML = '<span class="text-muted">fără cod</span>'; return; }
+
+  priceEl.innerHTML = '<i class="fas fa-circle-notch fa-spin" style="color:#adb5bd;font-size:.75rem"></i>';
+
+  try {
+    const r = await fetch('/api/fetch-competitor-price', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sku, competitor_id: competitorId, variant_id: variantId })
+    });
+    const d = await r.json();
+
+    if (r.ok && d.price) {
+      const compPrice = parseFloat(d.price);
+      // Compară cu prețul nostru curent
+      const curPriceEl = document.getElementById(`price-cur-${variantId}`);
+      const curText = curPriceEl?.querySelector('strong')?.textContent?.replace('.', '').replace(',', '.') || '0';
+      const curPrice = parseFloat(curText);
+
+      let cls = '';
+      if (curPrice > 0) {
+        if (compPrice < curPrice) cls = 'cheaper';       // competitor mai ieftin → roșu alert
+        else if (compPrice <= curPrice * 1.02) cls = 'same';  // similar → verde ok
+        else cls = 'pricier';                              // noi suntem mai ieftini → gri
+      }
+
+      const url = d.url ? `<a href="${escHtml(d.url)}" target="_blank" class="comp-link ms-1"><i class="fas fa-external-link-alt"></i></a>` : '';
+      priceEl.outerHTML = `<span class="comp-price ${cls}" id="comp-price-${variantId}-${competitorId}"
+                                 title="${compPrice.toFixed(2)} LEI">${compPrice.toLocaleString('ro-RO', {minimumFractionDigits:2,maximumFractionDigits:2})} LEI${url}</span>`;
+    } else {
+      priceEl.innerHTML = `<span class="text-danger" title="${escHtml(d.error || 'eroare')}">✗</span>`;
+    }
+  } catch (e) {
+    priceEl.innerHTML = '<span class="text-danger">!</span>';
+  }
+}
+
+async function fetchAllCompetitorPrices() {
+  if (competitorsList.length === 0) {
+    showToast('Configurează mai întâi competitorii (butonul ⚙ Competitori).', 'warning');
+    return;
+  }
+
+  // Adună toate variantele vizibile cu SKU
+  const visibleRows = document.querySelectorAll('[id^="row-"]');
+  const items = [];
+  visibleRows.forEach(tr => {
+    const variantId = tr.id.replace('row-', '');
+    const p = allProducts.find(x => String(x.variant_id) === String(variantId));
+    if (!p) return;
+    const sku = p.sku || p.variant_title || '';
+    if (!sku) return;
+    competitorsList.forEach(c => items.push({ variant_id: variantId, sku, competitor_id: c.id }));
+  });
+
+  if (items.length === 0) { showToast('Nu există produse cu cod pentru a căuta.', 'warning'); return; }
+
+  const btn = document.getElementById('btn-fetch-all-competitors');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fas fa-circle-notch fa-spin me-1"></i> Se preiau…';
+
+  // Marchează toate celulele ca loading
+  items.forEach(item => {
+    const el = document.getElementById(`comp-price-${item.variant_id}-${item.competitor_id}`);
+    if (el) el.innerHTML = '<i class="fas fa-circle-notch fa-spin" style="color:#adb5bd;font-size:.75rem"></i>';
+  });
+
+  try {
+    const r = await fetch('/api/fetch-competitor-prices-bulk', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ items })
+    });
+    const results = await r.json();
+
+    let ok = 0, err = 0;
+    Object.entries(results).forEach(([key, res]) => {
+      const [variantId, competitorId] = key.split('_');
+      const priceEl = document.getElementById(`comp-price-${variantId}-${competitorId}`);
+      if (!priceEl) return;
+
+      if (res.price) {
+        ok++;
+        const compPrice = parseFloat(res.price);
+        const curPriceEl = document.getElementById(`price-cur-${variantId}`);
+        const curText = curPriceEl?.querySelector('strong')?.textContent?.replace('.', '').replace(',', '.') || '0';
+        const curPrice = parseFloat(curText);
+        let cls = '';
+        if (curPrice > 0) {
+          if (compPrice < curPrice) cls = 'cheaper';
+          else if (compPrice <= curPrice * 1.02) cls = 'same';
+          else cls = 'pricier';
+        }
+        priceEl.className = `comp-price ${cls}`;
+        priceEl.textContent = compPrice.toLocaleString('ro-RO', {minimumFractionDigits:2, maximumFractionDigits:2}) + ' LEI';
+      } else {
+        err++;
+        priceEl.innerHTML = `<span class="text-danger" title="${escHtml(res.error || '?')}">✗</span>`;
+      }
+    });
+
+    showToast(`Prețuri competiție: ${ok} găsite, ${err} negăsite.`, ok > 0 ? 'success' : 'warning');
+  } catch (e) {
+    showToast('Eroare la preluarea prețurilor: ' + e.message, 'danger');
+  }
+
+  btn.disabled = false;
+  btn.innerHTML = '<i class="fas fa-globe me-1"></i> Prețuri competiție';
 }
 </script>
 </body>
