@@ -10,6 +10,11 @@ import os
 import re
 import hmac
 import hashlib
+try:
+    from bs4 import BeautifulSoup
+    BS4_AVAILABLE = True
+except ImportError:
+    BS4_AVAILABLE = False
 
 app = Flask(__name__)
 
@@ -298,6 +303,208 @@ def bulk_update():
                             'message': f'Shopify {resp.status_code}: {resp.text[:100]}'})
     ok = sum(1 for r in results if r['status'] == 'ok')
     return jsonify({'results': results, 'ok': ok, 'errors': len(results) - ok})
+
+
+# ── Competitors ───────────────────────────────────────────────────────────────
+
+COMPETITORS_FILE = os.path.join(os.path.dirname(__file__), 'competitors.json')
+
+BROWSER_HEADERS = {
+    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) '
+                  'AppleWebKit/537.36 (KHTML, like Gecko) '
+                  'Chrome/122.0.0.0 Safari/537.36',
+    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+    'Accept-Language': 'ro-RO,ro;q=0.9,en;q=0.8',
+    'Accept-Encoding': 'gzip, deflate, br',
+}
+
+
+def load_competitors():
+    if os.path.exists(COMPETITORS_FILE):
+        with open(COMPETITORS_FILE, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    return []
+
+
+def save_competitors(data):
+    with open(COMPETITORS_FILE, 'w', encoding='utf-8') as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
+
+def extract_price_from_element(soup_el):
+    """
+    Extrage prețul dintr-un element BeautifulSoup.
+    Gestionează formate speciale (ex: ITGStore cu .units + .sub-units).
+    """
+    if soup_el is None:
+        return None
+
+    # Format special: units + sub-units (ex: ITGStore: <span class="units">490</span><sup class="sub-units">73</sup>)
+    units_el = soup_el.select_one('.units')
+    sub_el = soup_el.select_one('.sub-units')
+    if units_el and sub_el:
+        try:
+            return float(f"{units_el.get_text().strip()}.{sub_el.get_text().strip()}")
+        except ValueError:
+            pass
+
+    return extract_price(soup_el.get_text())
+
+
+def extract_price(text):
+    """Extrage primul număr de tip preț dintr-un string."""
+    text = text.strip().replace('\xa0', ' ').replace('\u00a0', '').replace(' ', '')
+    # Înlocuiește separatoarele românești (1.234,56 → 1234.56)
+    match = re.search(r'(\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{1,2})?)', text)
+    if match:
+        raw = match.group(1)
+        # Detectează formatul: dacă ultimul separator e virgulă cu 2 cifre → zecimal
+        if re.search(r',\d{2}$', raw):
+            raw = raw.replace('.', '').replace(',', '.')
+        else:
+            raw = raw.replace(',', '')
+        try:
+            return float(raw)
+        except ValueError:
+            pass
+    return None
+
+
+@app.route('/api/competitors', methods=['GET'])
+def get_competitors():
+    return jsonify(load_competitors())
+
+
+@app.route('/api/competitors', methods=['POST'])
+def save_competitors_route():
+    data = request.json or []
+    save_competitors(data)
+    return jsonify({'status': 'ok'})
+
+
+@app.route('/api/fetch-competitor-price', methods=['POST'])
+def fetch_competitor_price():
+    """Preia prețul unui produs de pe un site competitor."""
+    if not BS4_AVAILABLE:
+        return jsonify({'error': 'beautifulsoup4 nu este instalat. Rulează: pip3 install beautifulsoup4 lxml'}), 500
+
+    data = request.json or {}
+    sku = data.get('sku', '').strip()
+    competitor_id = data.get('competitor_id', '')
+
+    if not sku:
+        return jsonify({'error': 'SKU lipsă'}), 400
+
+    competitors = load_competitors()
+    comp = next((c for c in competitors if c.get('id') == competitor_id), None)
+    if not comp:
+        return jsonify({'error': f'Competitor necunoscut: {competitor_id}'}), 404
+
+    search_url = comp.get('search_url', '').replace('{sku}', requests.utils.quote(sku))
+    price_selector = comp.get('price_selector', '')
+
+    if not search_url:
+        return jsonify({'error': 'search_url lipsă pentru acest competitor'}), 400
+
+    try:
+        resp = requests.get(search_url, headers=BROWSER_HEADERS, timeout=15, allow_redirects=True)
+        if resp.status_code != 200:
+            return jsonify({'error': f'HTTP {resp.status_code} de la {comp["name"]}'}), 400
+
+        soup = BeautifulSoup(resp.text, 'lxml')
+
+        price = None
+        if price_selector:
+            el = soup.select_one(price_selector)
+            if el:
+                price = extract_price_from_element(el)
+
+        # Fallback: caută pattern-uri comune de preț în pagină
+        if price is None:
+            for selector in [
+                '[class*="price"]', '[itemprop="price"]',
+                '[class*="pret"]', '[class*="cost"]'
+            ]:
+                el = soup.select_one(selector)
+                if el:
+                    candidate = extract_price_from_element(el)
+                    if candidate and candidate > 0:
+                        price = candidate
+                        break
+
+        if price is not None:
+            return jsonify({'price': f'{price:.2f}', 'url': search_url, 'competitor': comp['name']})
+        else:
+            return jsonify({'error': 'Prețul nu a putut fi extras. Verificați selectorul CSS.',
+                            'url': search_url}), 404
+
+    except requests.Timeout:
+        return jsonify({'error': f'Timeout la {comp["name"]}'}), 408
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/fetch-competitor-prices-bulk', methods=['POST'])
+def fetch_competitor_prices_bulk():
+    """Preia prețurile pentru mai multe SKU-uri simultan."""
+    if not BS4_AVAILABLE:
+        return jsonify({'error': 'beautifulsoup4 nu este instalat'}), 500
+
+    data = request.json or {}
+    items = data.get('items', [])   # [{variant_id, sku, competitor_id}, ...]
+    results = {}
+
+    for item in items:
+        sku = item.get('sku', '').strip()
+        competitor_id = item.get('competitor_id', '')
+        variant_id = item.get('variant_id')
+        key = f"{variant_id}_{competitor_id}"
+
+        if not sku:
+            results[key] = {'error': 'SKU lipsă'}
+            continue
+
+        competitors = load_competitors()
+        comp = next((c for c in competitors if c.get('id') == competitor_id), None)
+        if not comp:
+            results[key] = {'error': 'Competitor necunoscut'}
+            continue
+
+        search_url = comp.get('search_url', '').replace('{sku}', requests.utils.quote(sku))
+        price_selector = comp.get('price_selector', '')
+
+        try:
+            resp = requests.get(search_url, headers=BROWSER_HEADERS, timeout=12, allow_redirects=True)
+            if resp.status_code != 200:
+                results[key] = {'error': f'HTTP {resp.status_code}'}
+                continue
+
+            soup = BeautifulSoup(resp.text, 'lxml')
+            price = None
+
+            if price_selector:
+                el = soup.select_one(price_selector)
+                if el:
+                    price = extract_price_from_element(el)
+
+            if price is None:
+                for selector in ['[class*="price"]', '[itemprop="price"]', '[class*="pret"]']:
+                    el = soup.select_one(selector)
+                    if el:
+                        candidate = extract_price_from_element(el)
+                        if candidate and candidate > 0:
+                            price = candidate
+                            break
+
+            if price is not None:
+                results[key] = {'price': f'{price:.2f}', 'url': search_url}
+            else:
+                results[key] = {'error': 'Preț negăsit', 'url': search_url}
+
+        except Exception as e:
+            results[key] = {'error': str(e)[:80]}
+
+    return jsonify(results)
 
 
 if __name__ == '__main__':
