@@ -1193,77 +1193,130 @@ async function fetchOneCompetitorPrice(variantId, sku, competitorId) {
   }
 }
 
+let fetchAllRunning = false;
+let fetchAllStop = false;
+
+function applyCompPrice(variantId, competitorId, res) {
+  const priceEl = document.getElementById(`comp-price-${variantId}-${competitorId}`);
+  if (!priceEl) return false;
+  if (res.price) {
+    const compPrice = parseFloat(res.price);
+    const curPriceEl = document.getElementById(`price-cur-${variantId}`);
+    const curText = curPriceEl?.querySelector('strong')?.textContent?.replace(/\./g,'').replace(',','.') || '0';
+    const curPrice = parseFloat(curText);
+    let cls = '';
+    if (curPrice > 0) {
+      if (compPrice < curPrice) cls = 'cheaper';
+      else if (compPrice <= curPrice * 1.02) cls = 'same';
+      else cls = 'pricier';
+    }
+    priceEl.className = `comp-price ${cls}`;
+    priceEl.textContent = compPrice.toLocaleString('ro-RO', {minimumFractionDigits:2, maximumFractionDigits:2}) + ' LEI';
+    return true;
+  } else {
+    priceEl.innerHTML = `<span class="text-muted" title="${escHtml(res.error || '?')}">—</span>`;
+    return false;
+  }
+}
+
 async function fetchAllCompetitorPrices() {
   if (competitorsList.length === 0) {
     showToast('Configurează mai întâi competitorii (butonul ⚙ Competitori).', 'warning');
     return;
   }
 
-  // Adună toate variantele vizibile cu SKU
+  // Dacă rulează deja, oprește
+  if (fetchAllRunning) {
+    fetchAllStop = true;
+    return;
+  }
+
+  // Adună toate rândurile vizibile cu SKU
   const visibleRows = document.querySelectorAll('[id^="row-"]');
-  const items = [];
+  const rows = [];
   visibleRows.forEach(tr => {
     const variantId = tr.id.replace('row-', '');
     const p = allProducts.find(x => String(x.variant_id) === String(variantId));
     if (!p) return;
     const sku = p.sku || p.variant_title || '';
     if (!sku) return;
-    competitorsList.forEach(c => items.push({ variant_id: variantId, sku, competitor_id: c.id }));
+    rows.push({ variantId, sku });
   });
 
-  if (items.length === 0) { showToast('Nu există produse cu cod pentru a căuta.', 'warning'); return; }
+  if (rows.length === 0) { showToast('Nu există produse cu cod pentru a căuta.', 'warning'); return; }
 
   const btn = document.getElementById('btn-fetch-all-competitors');
-  btn.disabled = true;
-  btn.innerHTML = '<i class="fas fa-circle-notch fa-spin me-1"></i> Se preiau…';
+  fetchAllRunning = true;
+  fetchAllStop = false;
+  btn.innerHTML = '<i class="fas fa-stop me-1"></i> Stop';
+  btn.classList.replace('btn-outline-primary', 'btn-outline-danger');
 
-  // Marchează toate celulele ca loading
-  items.forEach(item => {
-    const el = document.getElementById(`comp-price-${item.variant_id}-${item.competitor_id}`);
-    if (el) el.innerHTML = '<i class="fas fa-circle-notch fa-spin" style="color:#adb5bd;font-size:.75rem"></i>';
+  // Marchează toate celulele ca în așteptare
+  rows.forEach(({ variantId }) => {
+    competitorsList.forEach(c => {
+      const el = document.getElementById(`comp-price-${variantId}-${c.id}`);
+      if (el) el.innerHTML = '<i class="fas fa-clock" style="color:#adb5bd;font-size:.75rem" title="În așteptare"></i>';
+    });
   });
 
-  try {
-    const r = await fetch('/api/fetch-competitor-prices-bulk', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ items })
+  let totalOk = 0, totalErr = 0;
+  const DELAY_SEC = 10;
+
+  for (let i = 0; i < rows.length; i++) {
+    if (fetchAllStop) {
+      showToast('Preluare oprită de utilizator.', 'warning');
+      break;
+    }
+
+    const { variantId, sku } = rows[i];
+
+    // Marchează rândul curent ca loading
+    competitorsList.forEach(c => {
+      const el = document.getElementById(`comp-price-${variantId}-${c.id}`);
+      if (el) el.innerHTML = '<i class="fas fa-circle-notch fa-spin" style="color:#0066cc;font-size:.75rem"></i>';
     });
-    const results = await r.json();
 
-    let ok = 0, err = 0;
-    Object.entries(results).forEach(([key, res]) => {
-      const [variantId, competitorId] = key.split('_');
-      const priceEl = document.getElementById(`comp-price-${variantId}-${competitorId}`);
-      if (!priceEl) return;
+    // Scroll la rândul curent
+    const currentRow = document.getElementById(`row-${variantId}`);
+    if (currentRow) currentRow.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 
-      if (res.price) {
-        ok++;
-        const compPrice = parseFloat(res.price);
-        const curPriceEl = document.getElementById(`price-cur-${variantId}`);
-        const curText = curPriceEl?.querySelector('strong')?.textContent?.replace('.', '').replace(',', '.') || '0';
-        const curPrice = parseFloat(curText);
-        let cls = '';
-        if (curPrice > 0) {
-          if (compPrice < curPrice) cls = 'cheaper';
-          else if (compPrice <= curPrice * 1.02) cls = 'same';
-          else cls = 'pricier';
-        }
-        priceEl.className = `comp-price ${cls}`;
-        priceEl.textContent = compPrice.toLocaleString('ro-RO', {minimumFractionDigits:2, maximumFractionDigits:2}) + ' LEI';
-      } else {
-        err++;
-        priceEl.innerHTML = `<span class="text-danger" title="${escHtml(res.error || '?')}">✗</span>`;
+    // Preia prețurile pentru toate competitoarele acestui rând
+    const items = competitorsList.map(c => ({ variant_id: variantId, sku, competitor_id: c.id }));
+    try {
+      const r = await fetch('/api/fetch-competitor-prices-bulk', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items })
+      });
+      const results = await r.json();
+      Object.entries(results).forEach(([key, res]) => {
+        const [vid, competitorId] = key.split('_');
+        if (applyCompPrice(vid, competitorId, res)) totalOk++; else totalErr++;
+      });
+    } catch (e) {
+      competitorsList.forEach(c => {
+        const el = document.getElementById(`comp-price-${variantId}-${c.id}`);
+        if (el) el.innerHTML = `<span class="text-danger" title="${escHtml(e.message)}">✗</span>`;
+        totalErr++;
+      });
+    }
+
+    // Dacă mai sunt rânduri, countdown 10s
+    if (i < rows.length - 1 && !fetchAllStop) {
+      for (let s = DELAY_SEC; s > 0; s--) {
+        if (fetchAllStop) break;
+        btn.innerHTML = `<i class="fas fa-stop me-1"></i> Stop &nbsp;<small>${i+1}/${rows.length} · ${s}s</small>`;
+        await new Promise(res => setTimeout(res, 1000));
       }
-    });
-
-    showToast(`Prețuri competiție: ${ok} găsite, ${err} negăsite.`, ok > 0 ? 'success' : 'warning');
-  } catch (e) {
-    showToast('Eroare la preluarea prețurilor: ' + e.message, 'danger');
+    }
   }
 
-  btn.disabled = false;
+  showToast(`Prețuri competiție: ${totalOk} găsite, ${totalErr} negăsite.`, totalOk > 0 ? 'success' : 'warning');
+
+  fetchAllRunning = false;
+  fetchAllStop = false;
   btn.innerHTML = '<i class="fas fa-globe me-1"></i> Prețuri competiție';
+  btn.classList.replace('btn-outline-danger', 'btn-outline-primary');
 }
 </script>
 </body>
