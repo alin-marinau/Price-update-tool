@@ -338,6 +338,12 @@
 
   <div class="ms-auto d-flex align-items-center gap-2">
     <span id="product-count" class="text-muted small"></span>
+    <div class="d-flex align-items-center gap-1" title="Prețurile competitorilor includ TVA. Introdu cota TVA pentru a afișa prețul fără TVA.">
+      <label for="inp-tva" class="small text-muted mb-0 text-nowrap">TVA %</label>
+      <input type="number" id="inp-tva" class="form-control form-control-sm text-center"
+             min="0" max="100" step="1" value="19"
+             style="width:62px;" title="Cota TVA aplicată prețurilor competiției" />
+    </div>
     <button class="btn btn-outline-secondary btn-sm" id="btn-fetch-all-competitors" title="Preia prețurile competiției pentru produsele vizibile">
       <i class="fas fa-globe me-1"></i> Prețuri competiție
     </button>
@@ -1167,27 +1173,7 @@ async function fetchOneCompetitorPrice(variantId, sku, competitorId) {
       body: JSON.stringify({ sku, competitor_id: competitorId, variant_id: variantId })
     });
     const d = await r.json();
-
-    if (r.ok && d.price) {
-      const compPrice = parseFloat(d.price);
-      // Compară cu prețul nostru curent
-      const curPriceEl = document.getElementById(`price-cur-${variantId}`);
-      const curText = curPriceEl?.querySelector('strong')?.textContent?.replace('.', '').replace(',', '.') || '0';
-      const curPrice = parseFloat(curText);
-
-      let cls = '';
-      if (curPrice > 0) {
-        if (compPrice < curPrice) cls = 'cheaper';       // competitor mai ieftin → roșu alert
-        else if (compPrice <= curPrice * 1.02) cls = 'same';  // similar → verde ok
-        else cls = 'pricier';                              // noi suntem mai ieftini → gri
-      }
-
-      const url = d.url ? `<a href="${escHtml(d.url)}" target="_blank" class="comp-link ms-1"><i class="fas fa-external-link-alt"></i></a>` : '';
-      priceEl.outerHTML = `<span class="comp-price ${cls}" id="comp-price-${variantId}-${competitorId}"
-                                 title="${compPrice.toFixed(2)} LEI">${compPrice.toLocaleString('ro-RO', {minimumFractionDigits:2,maximumFractionDigits:2})} LEI${url}</span>`;
-    } else {
-      priceEl.innerHTML = `<span class="text-danger" title="${escHtml(d.error || 'eroare')}">✗</span>`;
-    }
+    applyCompPrice(variantId, competitorId, d);
   } catch (e) {
     priceEl.innerHTML = '<span class="text-danger">!</span>';
   }
@@ -1196,11 +1182,20 @@ async function fetchOneCompetitorPrice(variantId, sku, competitorId) {
 let fetchAllRunning = false;
 let fetchAllStop = false;
 
+function getTvaMultiplier() {
+  const tva = parseFloat(document.getElementById('inp-tva')?.value) || 0;
+  return 1 + tva / 100;
+}
+
 function applyCompPrice(variantId, competitorId, res) {
   const priceEl = document.getElementById(`comp-price-${variantId}-${competitorId}`);
   if (!priceEl) return false;
   if (res.price) {
-    const compPrice = parseFloat(res.price);
+    const priceWithTva = parseFloat(res.price);
+    // Eliminăm TVA pentru comparație cu prețul elogicode (care e fără TVA)
+    const compPrice = priceWithTva / getTvaMultiplier();
+    const tva = parseFloat(document.getElementById('inp-tva')?.value) || 0;
+
     const curPriceEl = document.getElementById(`price-cur-${variantId}`);
     const curText = curPriceEl?.querySelector('strong')?.textContent?.replace(/\./g,'').replace(',','.') || '0';
     const curPrice = parseFloat(curText);
@@ -1211,7 +1206,11 @@ function applyCompPrice(variantId, competitorId, res) {
       else cls = 'pricier';
     }
     priceEl.className = `comp-price ${cls}`;
-    priceEl.textContent = compPrice.toLocaleString('ro-RO', {minimumFractionDigits:2, maximumFractionDigits:2}) + ' LEI';
+    // Afișăm prețul fără TVA + indicație
+    const label = tva > 0
+      ? compPrice.toLocaleString('ro-RO', {minimumFractionDigits:2, maximumFractionDigits:2}) + ` LEI <small class="text-muted">(-${tva}%TVA)</small>`
+      : compPrice.toLocaleString('ro-RO', {minimumFractionDigits:2, maximumFractionDigits:2}) + ' LEI';
+    priceEl.innerHTML = label;
     return true;
   } else {
     priceEl.innerHTML = `<span class="text-muted" title="${escHtml(res.error || '?')}">—</span>`;
@@ -1249,7 +1248,8 @@ async function fetchAllCompetitorPrices() {
   fetchAllRunning = true;
   fetchAllStop = false;
   btn.innerHTML = '<i class="fas fa-stop me-1"></i> Stop';
-  btn.classList.replace('btn-outline-primary', 'btn-outline-danger');
+  btn.classList.remove('btn-outline-secondary', 'btn-outline-primary');
+  btn.classList.add('btn-outline-danger');
 
   // Marchează toate celulele ca în așteptare
   rows.forEach(({ variantId }) => {
@@ -1290,7 +1290,10 @@ async function fetchAllCompetitorPrices() {
       });
       const results = await r.json();
       Object.entries(results).forEach(([key, res]) => {
-        const [vid, competitorId] = key.split('_');
+        // key = "{variantId}_{competitorId}" — competitorId poate conține '_'
+        const sep = key.indexOf('_');
+        const vid = key.substring(0, sep);
+        const competitorId = key.substring(sep + 1);
         if (applyCompPrice(vid, competitorId, res)) totalOk++; else totalErr++;
       });
     } catch (e) {
@@ -1316,7 +1319,8 @@ async function fetchAllCompetitorPrices() {
   fetchAllRunning = false;
   fetchAllStop = false;
   btn.innerHTML = '<i class="fas fa-globe me-1"></i> Prețuri competiție';
-  btn.classList.replace('btn-outline-danger', 'btn-outline-primary');
+  btn.classList.remove('btn-outline-danger');
+  btn.classList.add('btn-outline-secondary');
 }
 </script>
 </body>

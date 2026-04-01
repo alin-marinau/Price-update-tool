@@ -16,6 +16,12 @@ try:
 except ImportError:
     BS4_AVAILABLE = False
 
+try:
+    import cloudscraper
+    CLOUDSCRAPER_AVAILABLE = True
+except ImportError:
+    CLOUDSCRAPER_AVAILABLE = False
+
 app = Flask(__name__)
 
 CONFIG_FILE = os.path.join(os.path.dirname(__file__), 'config.json')
@@ -315,8 +321,22 @@ BROWSER_HEADERS = {
                   'Chrome/122.0.0.0 Safari/537.36',
     'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
     'Accept-Language': 'ro-RO,ro;q=0.9,en;q=0.8',
-    'Accept-Encoding': 'gzip, deflate, br',
+    'Accept-Encoding': 'gzip, deflate',
 }
+
+
+def fetch_competitor_page(url, timeout=15):
+    """
+    Preia pagina unui competitor.
+    Folosește cloudscraper dacă e disponibil (bypass Cloudflare/Brotli),
+    altfel requests cu BROWSER_HEADERS.
+    """
+    if CLOUDSCRAPER_AVAILABLE:
+        scraper = cloudscraper.create_scraper()
+        resp = scraper.get(url, timeout=timeout)
+    else:
+        resp = requests.get(url, headers=BROWSER_HEADERS, timeout=timeout, allow_redirects=True)
+    return resp
 
 
 def load_competitors():
@@ -341,10 +361,9 @@ def extract_price_from_element(soup_el):
 
     # Format special: units + sub-units (ex: ITGStore: <span class="units">490</span><sup class="sub-units">73</sup>)
     units_el = soup_el.select_one('.units')
-    sub_el = soup_el.select_one('.sub-units')
-    if units_el and sub_el:
+    if units_el:
         try:
-            return float(f"{units_el.get_text().strip()}.{sub_el.get_text().strip()}")
+            return float(units_el.get_text().strip())
         except ValueError:
             pass
 
@@ -407,7 +426,7 @@ def fetch_competitor_price():
         return jsonify({'error': 'search_url lipsă pentru acest competitor'}), 400
 
     try:
-        resp = requests.get(search_url, headers=BROWSER_HEADERS, timeout=15, allow_redirects=True)
+        resp = fetch_competitor_page(search_url, timeout=15)
         if resp.status_code != 200:
             return jsonify({'error': f'HTTP {resp.status_code} de la {comp["name"]}'}), 400
 
@@ -474,7 +493,7 @@ def fetch_competitor_prices_bulk():
         price_selector = comp.get('price_selector', '')
 
         try:
-            resp = requests.get(search_url, headers=BROWSER_HEADERS, timeout=12, allow_redirects=True)
+            resp = fetch_competitor_page(search_url, timeout=12)
             if resp.status_code != 200:
                 results[key] = {'error': f'HTTP {resp.status_code}'}
                 continue
@@ -505,6 +524,47 @@ def fetch_competitor_prices_bulk():
             results[key] = {'error': str(e)[:80]}
 
     return jsonify(results)
+
+
+@app.route('/api/debug-scrape')
+def debug_scrape():
+    """Debug: returnează HTML-ul primit de la competitor și ce găsește selectorul."""
+    competitor_id = request.args.get('competitor_id', '')
+    sku = request.args.get('sku', '')
+    competitors = load_competitors()
+    comp = next((c for c in competitors if c.get('id') == competitor_id), None)
+    if not comp:
+        return jsonify({'error': 'Competitor negăsit'}), 404
+
+    search_url = comp.get('search_url', '').replace('{sku}', requests.utils.quote(sku))
+    price_selector = comp.get('price_selector', '')
+
+    try:
+        resp = fetch_competitor_page(search_url, timeout=15)
+        soup = BeautifulSoup(resp.text, 'lxml') if BS4_AVAILABLE else None
+
+        el = soup.select_one(price_selector) if soup and price_selector else None
+        units_el = el.select_one('.units') if el else None
+        sub_el = el.select_one('.sub-units') if el else None
+
+        # Primele 2000 caractere din body pentru inspecție
+        body_snippet = resp.text[:3000] if resp.text else ''
+
+        return jsonify({
+            'url': search_url,
+            'status_code': resp.status_code,
+            'selector': price_selector,
+            'element_found': el is not None,
+            'element_html': str(el)[:300] if el else None,
+            'element_text': el.get_text()[:100] if el else None,
+            'units_found': units_el is not None,
+            'units_text': units_el.get_text().strip() if units_el else None,
+            'sub_units_text': sub_el.get_text().strip() if sub_el else None,
+            'extracted_price': extract_price_from_element(el) if el else None,
+            'html_snippet': body_snippet,
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 
 if __name__ == '__main__':
